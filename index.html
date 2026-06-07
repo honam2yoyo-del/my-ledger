@@ -2310,6 +2310,14 @@
         
         closeInputPage();
     };
+
+    window.deleteData = async function() {
+        if(confirm("정말로 이 내역을 삭제하시겠습니까?")) {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            await window.deleteRecordFromDB(editingItemId);
+            closeInputPage();
+        }
+    };
     
 </script>
 
