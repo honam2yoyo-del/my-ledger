@@ -860,8 +860,8 @@
             const emailDisplay = document.getElementById('user-email-display');
             if(emailDisplay) emailDisplay.innerText = user.email;
             
-            // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-            const userDocRef = doc(db, 'users', user.uid);
+            // ⭐️ 원상복구: 안전한 artifacts 폴더 경로로 다시 연결 (데이터 복구 완료!) ⭐️
+            const userDocRef = doc(db, 'artifacts', 'mymoneyapp-e6ef9', 'users', user.uid);
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     window.userSettings = docSnap.data();
@@ -888,6 +888,11 @@
                     window.hasFetchedData = true;
                     fetchData(); 
                 }
+            }, (error) => {
+                // ⭐️ 무한 로딩 방지를 위한 에러 처리 ⭐️
+                console.error("사용자 설정 로드 에러:", error);
+                setDisplay('loading-overlay', 'none');
+                alert("권한 문제로 차단되었습니다. 새로고침 해주세요.");
             });
         } else {
             currentUser = null;
@@ -915,6 +920,7 @@
         autoRegisterDoneThisSession = true;
 
         const currentYM = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        const APP_ID = 'mymoneyapp-e6ef9';
         
         if(window.userSettings.lastAutoRun === currentYM) {
             isRunningAutoRegister = false;
@@ -923,7 +929,7 @@
         
         const alreadyAutoRegistered = window.appData.some(d => d.isAutoRegistered === true && d.year === currentYear && d.month === currentMonth);
         if (alreadyAutoRegistered) {
-            try { await updateDoc(doc(db, 'users', currentUser.uid), { lastAutoRun: currentYM }); } catch(e) {}
+            try { await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid), { lastAutoRun: currentYM }); } catch(e) {}
             window.userSettings.lastAutoRun = currentYM;
             isRunningAutoRegister = false;
             return;
@@ -959,8 +965,7 @@
                     newRecord.timestamp = Date.now() + addedCount; 
                     
                     try {
-                        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-                        await addDoc(collection(db, 'users', currentUser.uid, 'records'), newRecord);
+                        await addDoc(collection(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records'), newRecord);
                         addedCount++;
                     } catch(e) { console.error("자동 등록 실패:", e); }
                 }
@@ -968,7 +973,7 @@
         }
 
         try {
-            await updateDoc(doc(db, 'users', currentUser.uid), {
+            await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid), {
                 lastAutoRun: currentYM
             });
             window.userSettings.lastAutoRun = currentYM;
@@ -981,12 +986,13 @@
         if(!currentUser || !window.userSettings) return;
         const autoFixed = document.getElementById('setting-auto-fixed').checked;
         const autoIncome = document.getElementById('setting-auto-income').checked;
+        const APP_ID = 'mymoneyapp-e6ef9';
         
         window.userSettings.autoFixed = autoFixed;
         window.userSettings.autoIncome = autoIncome;
 
         try {
-            await updateDoc(doc(db, 'users', currentUser.uid), {
+            await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid), {
                 autoFixed: autoFixed,
                 autoIncome: autoIncome
             });
@@ -1028,8 +1034,8 @@
     };
 
     function fetchData() {
-        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-        const colRef = collection(db, 'users', currentUser.uid, 'records');
+        const APP_ID = 'mymoneyapp-e6ef9';
+        const colRef = collection(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records');
         unsubscribeData = onSnapshot(colRef, async (snapshot) => {
             window.appData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setDisplay('loading-overlay', 'none');
@@ -1038,31 +1044,37 @@
 
             if (typeof window.initAppUI === 'function') window.initAppUI(); 
         }, (error) => {
-            console.error("데이터 오류:", error);
-            alert("데이터를 불러오지 못했습니다. (네트워크 오류)");
+            // ⭐️ 무한 로딩 방지를 위한 에러 처리 ⭐️
+            console.error("데이터 로드 에러:", error);
+            setDisplay('loading-overlay', 'none'); 
+            alert("데이터 권한 오류가 발생했습니다.");
         });
     }
 
     window.saveRecordToDB = async function(recordObj) {
         if(!currentUser) return;
-        try { await addDoc(collection(db, 'users', currentUser.uid, 'records'), recordObj); } 
+        const APP_ID = 'mymoneyapp-e6ef9';
+        try { await addDoc(collection(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records'), recordObj); } 
         catch(e) { console.error(e); }
     };
 
     window.updateRecordToDB = async function(id, recordObj) {
         if(!currentUser) return;
-        try { await updateDoc(doc(db, 'users', currentUser.uid, 'records', id), recordObj); } 
+        const APP_ID = 'mymoneyapp-e6ef9';
+        try { await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records', id), recordObj); } 
         catch(e) { console.error(e); }
     };
     
     window.deleteRecordFromDB = async function(id) {
         if(!currentUser) return;
-        try { await deleteDoc(doc(db, 'users', currentUser.uid, 'records', id)); } 
+        const APP_ID = 'mymoneyapp-e6ef9';
+        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records', id)); } 
         catch(e) { console.error(e); }
     }
 
     window.deleteAllFixedExpenses = async function() {
         if(!currentUser) return;
+        const APP_ID = 'mymoneyapp-e6ef9';
         
         const fixedRecords = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === currentYear && d.month === currentMonth);
         
@@ -1076,7 +1088,7 @@
             
             for(const record of fixedRecords) {
                 try {
-                    await deleteDoc(doc(db, 'users', currentUser.uid, 'records', record.id));
+                    await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'records', record.id));
                 } catch(e) { console.error("삭제 실패:", e); }
             }
             
