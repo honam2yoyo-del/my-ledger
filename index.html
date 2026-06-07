@@ -629,7 +629,7 @@
         </div>
     </div>
 
-    <!-- [수정] 모바일 환경 부드러운 스크롤 적용 -->
+    <!-- 모바일 환경 부드러운 스크롤 적용 -->
     <div id="page-input" class="page" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh; background-color: var(--bg-color); z-index: 200; overflow-y: auto; -webkit-overflow-scrolling: touch;">
         <div class="modal-header">
             <h1 class="header-logo" id="modal-main-title" style="font-size: 1.4rem;">내역 추가</h1>
@@ -845,7 +845,7 @@
 
     getRedirectResult(auth).catch(console.error);
 
-    // [추가] 화면 요소를 안전하게 숨기고 나타내는 함수 (에러 방지용)
+    // 화면 요소를 안전하게 숨기고 나타내는 함수
     function setDisplay(id, displayType) {
         const el = document.getElementById(id);
         if (el) el.style.display = displayType;
@@ -860,7 +860,7 @@
             const emailDisplay = document.getElementById('user-email-display');
             if(emailDisplay) emailDisplay.innerText = user.email;
             
-            // ⭐️ 원상복구: 안전한 artifacts 폴더 경로로 다시 연결 (데이터 복구 완료!) ⭐️
+            // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결
             const userDocRef = doc(db, 'artifacts', 'mymoneyapp-e6ef9', 'users', user.uid);
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -889,7 +889,6 @@
                     fetchData(); 
                 }
             }, (error) => {
-                // ⭐️ 무한 로딩 방지를 위한 에러 처리 ⭐️
                 console.error("사용자 설정 로드 에러:", error);
                 setDisplay('loading-overlay', 'none');
                 alert("권한 문제로 차단되었습니다. 새로고침 해주세요.");
@@ -1044,7 +1043,6 @@
 
             if (typeof window.initAppUI === 'function') window.initAppUI(); 
         }, (error) => {
-            // ⭐️ 무한 로딩 방지를 위한 에러 처리 ⭐️
             console.error("데이터 로드 에러:", error);
             setDisplay('loading-overlay', 'none'); 
             alert("데이터 권한 오류가 발생했습니다.");
@@ -1102,7 +1100,13 @@
     lucide.createIcons();
     Chart.register(ChartDataLabels);
 
-    document.getElementById('main-header-date').innerText = `${window.currentMonth}월`;
+    // ⭐️ [수정] 모듈(Firebase) 스크립트를 기다리지 않고 바로 날짜 객체를 생성하도록 
+    // 오늘 날짜 전역 변수를 여기서도 독립적으로 생성하여 즉각적으로 UI에 반영되게 조치했습니다.
+    const _todayUI = new Date();
+    const currentYear = _todayUI.getFullYear();
+    const currentMonth = _todayUI.getMonth() + 1;
+
+    document.getElementById('main-header-date').innerText = `${currentMonth}월`;
 
     function formatNumber(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -1169,9 +1173,9 @@
     window.refreshAllTabs = window.initAppUI;
 
     function renderMainDashboard() {
-        const flowData = window.appData.filter(d => d.mainCategory === '유동 지출' && d.year === window.currentYear && d.month === window.currentMonth);
-        const fixedData = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === window.currentYear && d.month === window.currentMonth);
-        const savData = window.appData.filter(d => d.mainCategory === '저축' && d.year === window.currentYear && d.month === window.currentMonth);
+        const flowData = window.appData.filter(d => d.mainCategory === '유동 지출' && d.year === currentYear && d.month === currentMonth);
+        const fixedData = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === currentYear && d.month === currentMonth);
+        const savData = window.appData.filter(d => d.mainCategory === '저축' && d.year === currentYear && d.month === currentMonth);
 
         const flowTotal = flowData.reduce((acc, d) => acc + d.amount, 0);
         const fixedTotal = fixedData.reduce((acc, d) => acc + d.amount, 0);
@@ -1253,7 +1257,7 @@
         if(mainCatName === '고정 지출') colorClass = 'color-red';
         if(mainCatName === '저축') colorClass = 'color-purple';
 
-        const targetData = window.appData.filter(d => d.mainCategory === mainCatName && d.year === window.currentYear && d.month === window.currentMonth);
+        const targetData = window.appData.filter(d => d.mainCategory === mainCatName && d.year === currentYear && d.month === currentMonth);
 
         if (detailList) detailList.innerHTML = renderGroupedDetails(mainCatName, targetData, 'price-minus', '-', colorClass, true);
         lucide.createIcons(); 
@@ -1270,8 +1274,8 @@
         if (fab) fab.style.display = 'flex';
     };
 
-    let detailYear = window.currentYear;
-    let detailMonth = window.currentMonth;
+    let detailYear = currentYear;
+    let detailMonth = currentMonth;
 
     window.toggleAccordion = function(id, headerEl) {
         const content = document.getElementById(id);
@@ -1397,8 +1401,8 @@
     /* ==========================================
        달력 탭 전용 함수 
        ========================================== */
-    let calendarYear = window.currentYear;
-    let calendarMonth = window.currentMonth;
+    let calendarYear = currentYear;
+    let calendarMonth = currentMonth;
 
     function renderCalendar() {
         const calGrid = document.getElementById('calendar-grid-content');
@@ -1451,7 +1455,7 @@
             if (dayExp > 0) eventsHTML += `<div class="cal-event event-expense">-${formatNumber(dayExp)}</div>`;
             if (daySav > 0) eventsHTML += `<div class="cal-event event-savings">-${formatNumber(daySav)}</div>`;
             
-            const isToday = (calendarYear === _today.getFullYear() && calendarMonth === _today.getMonth()+1 && i === todayDateNum) ? 'today' : '';
+            const isToday = (calendarYear === _todayUI.getFullYear() && calendarMonth === _todayUI.getMonth()+1 && i === todayDateNum) ? 'today' : '';
             const clickableClass = hasData ? 'has-data' : '';
             const onClickAttr = hasData ? `onclick="openDateDetails(${i})"` : `onclick="openInputPageWithDate(${calendarYear}, ${calendarMonth}, ${i})"`;
             
@@ -1542,8 +1546,8 @@
     /* ==========================================
        [4] 통계 탭 전용 함수 (단일 차트 & 서브탭)
        ========================================== */
-    let statsYear = window.currentYear;
-    let statsMonth = window.currentMonth;
+    let statsYear = currentYear;
+    let statsMonth = currentMonth;
     let statsMode = 'month'; 
     let currentStatsChartType = 'expense'; 
     let chartMainInstance = null;
@@ -1935,7 +1939,7 @@
     /* ==========================================
        연/월 선택 모달 전용 스크립트
        ========================================== */
-    let pickerYear = detailYear;
+    let pickerYear = currentYear;
     let currentPickerTarget = 'details';
 
     window.openMonthPicker = function(target) {
@@ -2198,7 +2202,7 @@
         if(idate) {
             const yy = currentYear;
             const mm = String(currentMonth).padStart(2, '0');
-            const dd = String(_today.getDate()).padStart(2, '0');
+            const dd = String(_todayUI.getDate()).padStart(2, '0');
             idate.value = `${yy}-${mm}-${dd}`;
         }
     }
