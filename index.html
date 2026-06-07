@@ -374,272 +374,26 @@
 </head>
 <body>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyBAGzTOYqnVFysfHvKKAw7KNX1QOnEXWmU",
-      authDomain: "mymoneyapp-e6ef9.firebaseapp.com",
-      projectId: "mymoneyapp-e6ef9",
-      storageBucket: "mymoneyapp-e6ef9.firebasestorage.app",
-      messagingSenderId: "461181649829",
-      appId: "1:461181649829:web:ca70e6ed2ef0ed18a8de4c"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const provider = new GoogleAuthProvider();
-
-    let currentUser = null;
-    let unsubscribeData = null;
-    window.appData = []; 
-
-    const _today = new Date();
-    const currentYear = _today.getFullYear();
-    const currentMonth = _today.getMonth() + 1;
-    window.currentYear = currentYear;
-    window.currentMonth = currentMonth;
-
-    getRedirectResult(auth).catch(console.error);
-
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            currentUser = user;
-            document.getElementById('login-page').style.display = 'none';
-            document.getElementById('loading-overlay').style.display = 'flex';
-            const emailDisplay = document.getElementById('user-email-display');
-            if(emailDisplay) emailDisplay.innerText = user.email;
-            
-            // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-            const userDocRef = doc(db, 'users', user.uid);
-            onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    window.userSettings = docSnap.data();
-                    document.getElementById('setting-auto-fixed').checked = window.userSettings.autoFixed !== false; 
-                    document.getElementById('setting-auto-income').checked = window.userSettings.autoIncome === true; 
-                } else {
-                    window.userSettings = { autoFixed: true, autoIncome: false };
-                    setDoc(userDocRef, {
-                        autoFixed: true,   
-                        autoIncome: false, 
-                        email: user.email || '',
-                        name: user.displayName || '',
-                        createdAt: new Date().toISOString()
-                    }, { merge: true });
-                }
-                
-                document.getElementById('loading-overlay').style.display = 'none';
-                document.querySelector('.app-container').style.display = 'block'; 
-                
-                if (!hasFetchedData) {
-                    hasFetchedData = true;
-                    fetchData(); 
-                }
-            });
-        } else {
-            currentUser = null;
-            window.appData = [];
-            hasFetchedData = false;
-            if(unsubscribeData) unsubscribeData();
-            
-            document.getElementById('loading-overlay').style.display = 'none';
-            document.querySelector('.app-container').style.display = 'none';
-            document.getElementById('login-page').style.display = 'flex';
-        }
-    });
-
-    let isRunningAutoRegister = false;
-    let autoRegisterDoneThisSession = false; 
-    let hasFetchedData = false;
+<!-- ⭐️ 고급스럽게 변경된 로그인 페이지 ⭐️ -->
+<div id="login-page">
+    <img src="apple-icon.jpg" alt="Logo" style="width: 90px; height: 90px; border-radius: 22px; margin-bottom: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); object-fit: cover;">
+    <h1 class="login-title">가계부</h1>
     
-    window.checkAndRunAutoRegister = async function() {
-        if(!currentUser || !window.userSettings) return;
-        if(autoRegisterDoneThisSession) return; 
-        if(isRunningAutoRegister) return; 
-        
-        isRunningAutoRegister = true;
-        autoRegisterDoneThisSession = true;
+    <button class="login-btn" onclick="loginWithGoogle()">
+        <svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.16v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.16C1.43 8.55 1 10.22 1 12s.43 3.45 1.16 4.93l3.68-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.16 7.07l3.68 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Google 계정으로 시작하기
+    </button>
+</div>
 
-        const currentYM = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-        
-        if(window.userSettings.lastAutoRun === currentYM) {
-            isRunningAutoRegister = false;
-            return;
-        }
-        
-        const alreadyAutoRegistered = window.appData.some(d => d.isAutoRegistered === true && d.year === currentYear && d.month === currentMonth);
-        if (alreadyAutoRegistered) {
-            try { await updateDoc(doc(db, 'users', currentUser.uid), { lastAutoRun: currentYM }); } catch(e) {}
-            window.userSettings.lastAutoRun = currentYM;
-            isRunningAutoRegister = false;
-            return;
-        }
-
-        const autoFixed = window.userSettings.autoFixed !== false; 
-        const autoIncome = window.userSettings.autoIncome === true; 
-
-        if(autoFixed || autoIncome) {
-            let prevYear = currentYear;
-            let prevMonth = currentMonth - 1;
-            if (prevMonth < 1) { prevMonth = 12; prevYear--; }
-
-            const prevRecords = window.appData.filter(d => d.year === prevYear && d.month === prevMonth);
-            let addedCount = 0;
-
-            for(const record of prevRecords) {
-                let shouldCopy = false;
-                if(autoFixed && record.mainCategory === '고정 지출') shouldCopy = true;
-                if(autoIncome && record.mainCategory === '수입') shouldCopy = true;
-
-                if(shouldCopy) {
-                    const newRecord = { ...record };
-                    delete newRecord.id; 
-                    newRecord.year = currentYear;
-                    newRecord.month = currentMonth;
-                    newRecord.isAutoRegistered = true; 
-                    
-                    const lastDayOfCurrentMonth = new Date(currentYear, currentMonth, 0).getDate();
-                    if(newRecord.day > lastDayOfCurrentMonth) newRecord.day = lastDayOfCurrentMonth;
-                    
-                    newRecord.dateStr = `${currentMonth}. ${newRecord.day}`;
-                    newRecord.timestamp = Date.now() + addedCount; 
-                    
-                    try {
-                        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-                        await addDoc(collection(db, 'users', currentUser.uid, 'records'), newRecord);
-                        addedCount++;
-                    } catch(e) { console.error("자동 등록 실패:", e); }
-                }
-            }
-        }
-
-        try {
-            await updateDoc(doc(db, 'users', currentUser.uid), {
-                lastAutoRun: currentYM
-            });
-            window.userSettings.lastAutoRun = currentYM;
-        } catch(e) {}
-        
-        isRunningAutoRegister = false;
-    };
-
-    window.updateSettings = async function() {
-        if(!currentUser || !window.userSettings) return;
-        const autoFixed = document.getElementById('setting-auto-fixed').checked;
-        const autoIncome = document.getElementById('setting-auto-income').checked;
-        
-        window.userSettings.autoFixed = autoFixed;
-        window.userSettings.autoIncome = autoIncome;
-
-        try {
-            await updateDoc(doc(db, 'users', currentUser.uid), {
-                autoFixed: autoFixed,
-                autoIncome: autoIncome
-            });
-        } catch(e) {
-            console.error("설정 저장 실패:", e);
-        }
-    };
-
-    window.loginWithGoogle = function() {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-        document.getElementById('loading-overlay').style.display = 'flex';
-        
-        if (isMobile || isPWA) {
-            signInWithRedirect(auth, provider).catch(error => {
-                console.error("로그인 에러:", error);
-                document.getElementById('loading-overlay').style.display = 'none';
-                alert("로그인 실패: " + error.message);
-            });
-        } else {
-            signInWithPopup(auth, provider).catch(error => {
-                console.error("로그인 에러:", error);
-                document.getElementById('loading-overlay').style.display = 'none';
-                if (error.code === 'auth/unauthorized-domain') {
-                    alert("구글 로그인 정책: 현재 주소가 승인된 도메인이 아닙니다.");
-                } else {
-                    alert("로그인 중 오류가 발생했습니다.\n" + error.message);
-                }
-            });
-        }
-    };
-
-    window.logout = function() {
-        if(confirm("정말 로그아웃 하시겠습니까?")) {
-            if(unsubscribeData) unsubscribeData();
-            signOut(auth);
-        }
-    };
-
-    function fetchData() {
-        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
-        const colRef = collection(db, 'users', currentUser.uid, 'records');
-        unsubscribeData = onSnapshot(colRef, async (snapshot) => {
-            window.appData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            document.getElementById('loading-overlay').style.display = 'none';
-            
-            await window.checkAndRunAutoRegister();
-
-            if (typeof window.initAppUI === 'function') window.initAppUI(); 
-        }, (error) => {
-            console.error("데이터 오류:", error);
-            alert("데이터를 불러오지 못했습니다. (네트워크 오류)");
-        });
-    }
-
-    window.saveRecordToDB = async function(recordObj) {
-        if(!currentUser) return;
-        try { await addDoc(collection(db, 'users', currentUser.uid, 'records'), recordObj); } 
-        catch(e) { console.error(e); }
-    };
-
-    window.updateRecordToDB = async function(id, recordObj) {
-        if(!currentUser) return;
-        try { await updateDoc(doc(db, 'users', currentUser.uid, 'records', id), recordObj); } 
-        catch(e) { console.error(e); }
-    };
-    
-    window.deleteRecordFromDB = async function(id) {
-        if(!currentUser) return;
-        try { await deleteDoc(doc(db, 'users', currentUser.uid, 'records', id)); } 
-        catch(e) { console.error(e); }
-    }
-
-    window.deleteAllFixedExpenses = async function() {
-        if(!currentUser) return;
-        
-        const fixedRecords = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === currentYear && d.month === currentMonth);
-        
-        if (fixedRecords.length === 0) {
-            alert(`이번 달(${currentMonth}월)에 등록된 고정 지출이 없습니다.`);
-            return;
-        }
-
-        if(confirm(`이번 달(${currentMonth}월)의 고정 지출 내역 ${fixedRecords.length}건을 모두 삭제하시겠습니까?\n\n※ 실수로 등록된 내역을 싹 지울 수 있습니다.`)) {
-            document.getElementById('loading-overlay').style.display = 'flex';
-            
-            for(const record of fixedRecords) {
-                try {
-                    await deleteDoc(doc(db, 'users', currentUser.uid, 'records', record.id));
-                } catch(e) { console.error("삭제 실패:", e); }
-            }
-            
-            document.getElementById('loading-overlay').style.display = 'none';
-            alert('고정 지출이 모두 삭제되었습니다.');
-        }
-    };
-</script>
+<!-- ⭐️ 승인 대기 중 화면 (이제 사용하지 않지만 만약을 대비해 껍데기만 둠) ⭐️ -->
+<div id="pending-page" style="display:none;"></div>
 
 <div id="loading-overlay" style="display: none;">
     <div class="spinner"></div>
     <div style="font-weight: 600; color: var(--text-normal); font-size: 1rem;">로딩 중입니다...</div>
 </div>
 
+<!-- ⭐️ 기본 앱 컨테이너 ⭐️ -->
 <div class="app-container" style="display: none;">
     <div id="page-calendar" class="page">
         <div class="top-spacer"></div>
@@ -875,13 +629,12 @@
         </div>
     </div>
 
-    <!-- [수정] 부드러운 스크롤을 위해 높이와 webkit-overflow-scrolling 추가 -->
+    <!-- [수정] 모바일 환경 부드러운 스크롤 적용 -->
     <div id="page-input" class="page" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh; background-color: var(--bg-color); z-index: 200; overflow-y: auto; -webkit-overflow-scrolling: touch;">
         <div class="modal-header">
             <h1 class="header-logo" id="modal-main-title" style="font-size: 1.4rem;">내역 추가</h1>
             <button class="close-btn" onclick="closeInputPage()">닫기</button>
         </div>
-        <!-- [수정] 모바일에서 맨 아래가 가려지지 않게 하단 여백 추가 -->
         <div class="main-card" style="margin-top:0; padding-bottom: 80px;">
             <div class="step-indicator" id="step-nav">
                 <div class="step-item active" id="nav-type" onclick="goBack(1)" style="cursor: pointer;">1. 유형</div>
@@ -1056,15 +809,288 @@
 
 </div>
 
-<script>
-    lucide.createIcons();
-    Chart.register(ChartDataLabels);
+<!-- ==========================================
+     ⭐️ [스크립트 이동] ⭐️
+     화면 요소가 없는 상태에서 참조하지 않도록,
+     모든 로직 스크립트를 화면 요소(HTML) 최하단으로 내렸습니다.
+     ========================================== -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBAGzTOYqnVFysfHvKKAw7KNX1QOnEXWmU",
+      authDomain: "mymoneyapp-e6ef9.firebaseapp.com",
+      projectId: "mymoneyapp-e6ef9",
+      storageBucket: "mymoneyapp-e6ef9.firebasestorage.app",
+      messagingSenderId: "461181649829",
+      appId: "1:461181649829:web:ca70e6ed2ef0ed18a8de4c"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    let currentUser = null;
+    let unsubscribeData = null;
+    window.appData = []; 
 
     const _today = new Date();
     const currentYear = _today.getFullYear();
     const currentMonth = _today.getMonth() + 1;
+    window.currentYear = currentYear;
+    window.currentMonth = currentMonth;
+
+    getRedirectResult(auth).catch(console.error);
+
+    // [추가] 화면 요소를 안전하게 숨기고 나타내는 함수 (에러 방지용)
+    function setDisplay(id, displayType) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = displayType;
+    }
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            setDisplay('login-page', 'none');
+            setDisplay('loading-overlay', 'flex');
+            
+            const emailDisplay = document.getElementById('user-email-display');
+            if(emailDisplay) emailDisplay.innerText = user.email;
+            
+            // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
+            const userDocRef = doc(db, 'users', user.uid);
+            onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    window.userSettings = docSnap.data();
+                    const fixedSwitch = document.getElementById('setting-auto-fixed');
+                    const incomeSwitch = document.getElementById('setting-auto-income');
+                    if (fixedSwitch) fixedSwitch.checked = window.userSettings.autoFixed !== false; 
+                    if (incomeSwitch) incomeSwitch.checked = window.userSettings.autoIncome === true; 
+                } else {
+                    window.userSettings = { autoFixed: true, autoIncome: false };
+                    setDoc(userDocRef, {
+                        autoFixed: true,   
+                        autoIncome: false, 
+                        email: user.email || '',
+                        name: user.displayName || '',
+                        createdAt: new Date().toISOString()
+                    }, { merge: true });
+                }
+                
+                setDisplay('loading-overlay', 'none');
+                const appContainer = document.querySelector('.app-container');
+                if (appContainer) appContainer.style.display = 'block'; 
+                
+                if (!window.hasFetchedData) {
+                    window.hasFetchedData = true;
+                    fetchData(); 
+                }
+            });
+        } else {
+            currentUser = null;
+            window.appData = [];
+            window.hasFetchedData = false;
+            if(unsubscribeData) unsubscribeData();
+            
+            setDisplay('loading-overlay', 'none');
+            const appContainer = document.querySelector('.app-container');
+            if (appContainer) appContainer.style.display = 'none';
+            setDisplay('login-page', 'flex');
+        }
+    });
+
+    let isRunningAutoRegister = false;
+    let autoRegisterDoneThisSession = false; 
+    window.hasFetchedData = false;
     
-    document.getElementById('main-header-date').innerText = `${currentMonth}월`;
+    window.checkAndRunAutoRegister = async function() {
+        if(!currentUser || !window.userSettings) return;
+        if(autoRegisterDoneThisSession) return; 
+        if(isRunningAutoRegister) return; 
+        
+        isRunningAutoRegister = true;
+        autoRegisterDoneThisSession = true;
+
+        const currentYM = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        
+        if(window.userSettings.lastAutoRun === currentYM) {
+            isRunningAutoRegister = false;
+            return;
+        }
+        
+        const alreadyAutoRegistered = window.appData.some(d => d.isAutoRegistered === true && d.year === currentYear && d.month === currentMonth);
+        if (alreadyAutoRegistered) {
+            try { await updateDoc(doc(db, 'users', currentUser.uid), { lastAutoRun: currentYM }); } catch(e) {}
+            window.userSettings.lastAutoRun = currentYM;
+            isRunningAutoRegister = false;
+            return;
+        }
+
+        const autoFixed = window.userSettings.autoFixed !== false; 
+        const autoIncome = window.userSettings.autoIncome === true; 
+
+        if(autoFixed || autoIncome) {
+            let prevYear = currentYear;
+            let prevMonth = currentMonth - 1;
+            if (prevMonth < 1) { prevMonth = 12; prevYear--; }
+
+            const prevRecords = window.appData.filter(d => d.year === prevYear && d.month === prevMonth);
+            let addedCount = 0;
+
+            for(const record of prevRecords) {
+                let shouldCopy = false;
+                if(autoFixed && record.mainCategory === '고정 지출') shouldCopy = true;
+                if(autoIncome && record.mainCategory === '수입') shouldCopy = true;
+
+                if(shouldCopy) {
+                    const newRecord = { ...record };
+                    delete newRecord.id; 
+                    newRecord.year = currentYear;
+                    newRecord.month = currentMonth;
+                    newRecord.isAutoRegistered = true; 
+                    
+                    const lastDayOfCurrentMonth = new Date(currentYear, currentMonth, 0).getDate();
+                    if(newRecord.day > lastDayOfCurrentMonth) newRecord.day = lastDayOfCurrentMonth;
+                    
+                    newRecord.dateStr = `${currentMonth}. ${newRecord.day}`;
+                    newRecord.timestamp = Date.now() + addedCount; 
+                    
+                    try {
+                        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
+                        await addDoc(collection(db, 'users', currentUser.uid, 'records'), newRecord);
+                        addedCount++;
+                    } catch(e) { console.error("자동 등록 실패:", e); }
+                }
+            }
+        }
+
+        try {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+                lastAutoRun: currentYM
+            });
+            window.userSettings.lastAutoRun = currentYM;
+        } catch(e) {}
+        
+        isRunningAutoRegister = false;
+    };
+
+    window.updateSettings = async function() {
+        if(!currentUser || !window.userSettings) return;
+        const autoFixed = document.getElementById('setting-auto-fixed').checked;
+        const autoIncome = document.getElementById('setting-auto-income').checked;
+        
+        window.userSettings.autoFixed = autoFixed;
+        window.userSettings.autoIncome = autoIncome;
+
+        try {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+                autoFixed: autoFixed,
+                autoIncome: autoIncome
+            });
+        } catch(e) {
+            console.error("설정 저장 실패:", e);
+        }
+    };
+
+    window.loginWithGoogle = function() {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+        setDisplay('loading-overlay', 'flex');
+        
+        if (isMobile || isPWA) {
+            signInWithRedirect(auth, provider).catch(error => {
+                console.error("로그인 에러:", error);
+                setDisplay('loading-overlay', 'none');
+                alert("로그인 실패: " + error.message);
+            });
+        } else {
+            signInWithPopup(auth, provider).catch(error => {
+                console.error("로그인 에러:", error);
+                setDisplay('loading-overlay', 'none');
+                if (error.code === 'auth/unauthorized-domain') {
+                    alert("구글 로그인 정책: 현재 주소가 승인된 도메인이 아닙니다.");
+                } else {
+                    alert("로그인 중 오류가 발생했습니다.\n" + error.message);
+                }
+            });
+        }
+    };
+
+    window.logout = function() {
+        if(confirm("정말 로그아웃 하시겠습니까?")) {
+            if(unsubscribeData) unsubscribeData();
+            signOut(auth);
+        }
+    };
+
+    function fetchData() {
+        // ⭐️ 기존 데이터를 복구하기 위해 경로를 users 폴더로 연결 ⭐️
+        const colRef = collection(db, 'users', currentUser.uid, 'records');
+        unsubscribeData = onSnapshot(colRef, async (snapshot) => {
+            window.appData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setDisplay('loading-overlay', 'none');
+            
+            await window.checkAndRunAutoRegister();
+
+            if (typeof window.initAppUI === 'function') window.initAppUI(); 
+        }, (error) => {
+            console.error("데이터 오류:", error);
+            alert("데이터를 불러오지 못했습니다. (네트워크 오류)");
+        });
+    }
+
+    window.saveRecordToDB = async function(recordObj) {
+        if(!currentUser) return;
+        try { await addDoc(collection(db, 'users', currentUser.uid, 'records'), recordObj); } 
+        catch(e) { console.error(e); }
+    };
+
+    window.updateRecordToDB = async function(id, recordObj) {
+        if(!currentUser) return;
+        try { await updateDoc(doc(db, 'users', currentUser.uid, 'records', id), recordObj); } 
+        catch(e) { console.error(e); }
+    };
+    
+    window.deleteRecordFromDB = async function(id) {
+        if(!currentUser) return;
+        try { await deleteDoc(doc(db, 'users', currentUser.uid, 'records', id)); } 
+        catch(e) { console.error(e); }
+    }
+
+    window.deleteAllFixedExpenses = async function() {
+        if(!currentUser) return;
+        
+        const fixedRecords = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === currentYear && d.month === currentMonth);
+        
+        if (fixedRecords.length === 0) {
+            alert(`이번 달(${currentMonth}월)에 등록된 고정 지출이 없습니다.`);
+            return;
+        }
+
+        if(confirm(`이번 달(${currentMonth}월)의 고정 지출 내역 ${fixedRecords.length}건을 모두 삭제하시겠습니까?\n\n※ 실수로 등록된 내역을 싹 지울 수 있습니다.`)) {
+            setDisplay('loading-overlay', 'flex');
+            
+            for(const record of fixedRecords) {
+                try {
+                    await deleteDoc(doc(db, 'users', currentUser.uid, 'records', record.id));
+                } catch(e) { console.error("삭제 실패:", e); }
+            }
+            
+            setDisplay('loading-overlay', 'none');
+            alert('고정 지출이 모두 삭제되었습니다.');
+        }
+    };
+</script>
+
+<script>
+    lucide.createIcons();
+    Chart.register(ChartDataLabels);
+
+    document.getElementById('main-header-date').innerText = `${window.currentMonth}월`;
 
     function formatNumber(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -1131,21 +1157,30 @@
     window.refreshAllTabs = window.initAppUI;
 
     function renderMainDashboard() {
-        const flowData = window.appData.filter(d => d.mainCategory === '유동 지출' && d.year === currentYear && d.month === currentMonth);
-        const fixedData = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === currentYear && d.month === currentMonth);
-        const savData = window.appData.filter(d => d.mainCategory === '저축' && d.year === currentYear && d.month === currentMonth);
+        const flowData = window.appData.filter(d => d.mainCategory === '유동 지출' && d.year === window.currentYear && d.month === window.currentMonth);
+        const fixedData = window.appData.filter(d => d.mainCategory === '고정 지출' && d.year === window.currentYear && d.month === window.currentMonth);
+        const savData = window.appData.filter(d => d.mainCategory === '저축' && d.year === window.currentYear && d.month === window.currentMonth);
 
         const flowTotal = flowData.reduce((acc, d) => acc + d.amount, 0);
         const fixedTotal = fixedData.reduce((acc, d) => acc + d.amount, 0);
         const savTotal = savData.reduce((acc, d) => acc + d.amount, 0);
         const expTotal = flowTotal + fixedTotal + savTotal;
 
-        document.getElementById('total-expense').innerText = `${formatNumber(expTotal)}원`;
-        document.getElementById('total-flow').innerText = `${formatNumber(flowTotal)}원`;
-        document.getElementById('total-fixed').innerText = `${formatNumber(fixedTotal)}원`;
-        document.getElementById('total-savings').innerText = `${formatNumber(savTotal)}원`;
+        const totalExpenseEl = document.getElementById('total-expense');
+        if(totalExpenseEl) totalExpenseEl.innerText = `${formatNumber(expTotal)}원`;
+        
+        const totalFlowEl = document.getElementById('total-flow');
+        if(totalFlowEl) totalFlowEl.innerText = `${formatNumber(flowTotal)}원`;
+        
+        const totalFixedEl = document.getElementById('total-fixed');
+        if(totalFixedEl) totalFixedEl.innerText = `${formatNumber(fixedTotal)}원`;
+        
+        const totalSavingsEl = document.getElementById('total-savings');
+        if(totalSavingsEl) totalSavingsEl.innerText = `${formatNumber(savTotal)}원`;
 
-        const ctxMain = document.getElementById('myDonutChart').getContext('2d');
+        const canvasEl = document.getElementById('myDonutChart');
+        if(!canvasEl) return;
+        const ctxMain = canvasEl.getContext('2d');
         if(myMainChartInstance) myMainChartInstance.destroy();
 
         myMainChartInstance = new Chart(ctxMain, {
@@ -1186,49 +1221,56 @@
         });
     }
 
-    function showDetails(mainCatName) {
+    window.showDetails = function(mainCatName) {
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-        document.getElementById('bottom-nav-bar').style.display = 'none';
-        document.querySelector('.fab-button').style.display = 'none';
+        const bottomNav = document.getElementById('bottom-nav-bar');
+        if (bottomNav) bottomNav.style.display = 'none';
+        const fab = document.querySelector('.fab-button');
+        if (fab) fab.style.display = 'none';
         
-        document.getElementById('page-home-details').classList.add('active');
+        const homeDetails = document.getElementById('page-home-details');
+        if (homeDetails) homeDetails.classList.add('active');
 
         const detailTitle = document.getElementById('home-detail-title');
         const detailList = document.getElementById('home-detail-list');
         
-        detailList.innerHTML = ''; 
-
-        detailTitle.innerHTML = mainCatName;
+        if (detailList) detailList.innerHTML = ''; 
+        if (detailTitle) detailTitle.innerHTML = mainCatName;
         
         let colorClass = 'color-blue';
         if(mainCatName === '고정 지출') colorClass = 'color-red';
         if(mainCatName === '저축') colorClass = 'color-purple';
 
-        const targetData = window.appData.filter(d => d.mainCategory === mainCatName && d.year === currentYear && d.month === currentMonth);
+        const targetData = window.appData.filter(d => d.mainCategory === mainCatName && d.year === window.currentYear && d.month === window.currentMonth);
 
-        detailList.innerHTML = renderGroupedDetails(mainCatName, targetData, 'price-minus', '-', colorClass, true);
+        if (detailList) detailList.innerHTML = renderGroupedDetails(mainCatName, targetData, 'price-minus', '-', colorClass, true);
         lucide.createIcons(); 
-    }
+    };
 
-    function closeHomeDetails() {
-        document.getElementById('page-home-details').classList.remove('active');
-        document.getElementById('page-main').classList.add('active');
-        document.getElementById('bottom-nav-bar').style.display = 'flex';
-        document.querySelector('.fab-button').style.display = 'flex';
-    }
+    window.closeHomeDetails = function() {
+        const homeDetails = document.getElementById('page-home-details');
+        if (homeDetails) homeDetails.classList.remove('active');
+        const pageMain = document.getElementById('page-main');
+        if (pageMain) pageMain.classList.add('active');
+        const bottomNav = document.getElementById('bottom-nav-bar');
+        if (bottomNav) bottomNav.style.display = 'flex';
+        const fab = document.querySelector('.fab-button');
+        if (fab) fab.style.display = 'flex';
+    };
 
-    let detailYear = currentYear;
-    let detailMonth = currentMonth;
+    let detailYear = window.currentYear;
+    let detailMonth = window.currentMonth;
 
     window.toggleAccordion = function(id, headerEl) {
         const content = document.getElementById(id);
+        if (!content) return;
         const icon = headerEl.querySelector('.accordion-icon');
         if (content.classList.contains('open')) {
             content.classList.remove('open');
-            icon.classList.remove('open');
+            if (icon) icon.classList.remove('open');
         } else {
             content.classList.add('open');
-            icon.classList.add('open');
+            if (icon) icon.classList.add('open');
         }
     };
 
@@ -1313,8 +1355,11 @@
     }
 
     function renderDetailsTab() {
-        document.getElementById('details-month-display').innerHTML = `${detailYear}년 ${detailMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+        const displayEl = document.getElementById('details-month-display');
+        if(displayEl) displayEl.innerHTML = `${detailYear}년 ${detailMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+        
         const container = document.getElementById('details-content-list');
+        if(!container) return;
         container.innerHTML = '';
         
         const flowData = window.appData.filter(d => d.mainCategory === '유동 지출' && d.year === detailYear && d.month === detailMonth);
@@ -1330,24 +1375,25 @@
         lucide.createIcons();
     }
 
-    function changeDetailMonth(delta) {
+    window.changeDetailMonth = function(delta) {
         detailMonth += delta;
         if (detailMonth > 12) { detailMonth = 1; detailYear++; } 
         else if (detailMonth < 1) { detailMonth = 12; detailYear--; }
         renderDetailsTab(); 
-    }
+    };
 
     /* ==========================================
        달력 탭 전용 함수 
        ========================================== */
-    let calendarYear = currentYear;
-    let calendarMonth = currentMonth;
+    let calendarYear = window.currentYear;
+    let calendarMonth = window.currentMonth;
 
     function renderCalendar() {
         const calGrid = document.getElementById('calendar-grid-content');
         if (!calGrid) return;
 
-        document.getElementById('calendar-month-display').innerHTML = `${calendarYear}년 ${calendarMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+        const calDisplay = document.getElementById('calendar-month-display');
+        if(calDisplay) calDisplay.innerHTML = `${calendarYear}년 ${calendarMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
         
         calGrid.innerHTML = `
             <div class="cal-day-header">일</div><div class="cal-day-header">월</div><div class="cal-day-header">화</div>
@@ -1405,34 +1451,45 @@
             `;
         }
 
-        document.getElementById('cal-sum-income').innerText = `+${formatNumber(sumInc)}`;
-        document.getElementById('cal-sum-expense').innerText = `-${formatNumber(sumExp)}`;
-        document.getElementById('cal-sum-savings').innerText = `-${formatNumber(sumSav)}`;
+        const calSumInc = document.getElementById('cal-sum-income');
+        if(calSumInc) calSumInc.innerText = `+${formatNumber(sumInc)}`;
+        const calSumExp = document.getElementById('cal-sum-expense');
+        if(calSumExp) calSumExp.innerText = `-${formatNumber(sumExp)}`;
+        const calSumSav = document.getElementById('cal-sum-savings');
+        if(calSumSav) calSumSav.innerText = `-${formatNumber(sumSav)}`;
         
         const total = sumInc - sumExp - sumSav;
         const totalEl = document.getElementById('cal-sum-total');
-        totalEl.innerText = `${total > 0 ? '+' : ''}${formatNumber(total)}`;
-        totalEl.style.color = total > 0 ? 'var(--toss-blue)' : (total < 0 ? 'var(--toss-red)' : 'var(--text-main)');
+        if(totalEl) {
+            totalEl.innerText = `${total > 0 ? '+' : ''}${formatNumber(total)}`;
+            totalEl.style.color = total > 0 ? 'var(--toss-blue)' : (total < 0 ? 'var(--toss-red)' : 'var(--text-main)');
+        }
 
         lucide.createIcons();
     }
 
-    function changeCalendarMonth(delta) {
+    window.changeCalendarMonth = function(delta) {
         calendarMonth += delta;
         if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; } 
         else if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
         renderCalendar();
-    }
+    };
 
-    function openDateDetails(day) {
+    window.openDateDetails = function(day) {
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-        document.getElementById('bottom-nav-bar').style.display = 'none';
-        document.querySelector('.fab-button').style.display = 'none';
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'none';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'none';
         
-        document.getElementById('page-date-details').classList.add('active');
-        document.getElementById('date-detail-title').innerText = `${calendarMonth}월 ${day}일 내역`;
+        const pd = document.getElementById('page-date-details');
+        if(pd) pd.classList.add('active');
+        
+        const title = document.getElementById('date-detail-title');
+        if(title) title.innerText = `${calendarMonth}월 ${day}일 내역`;
 
         const content = document.getElementById('date-detail-content');
+        if(!content) return;
         content.innerHTML = '';
 
         const dayItems = window.appData.filter(d => d.year === calendarYear && d.month === calendarMonth && d.day === day);
@@ -1455,21 +1512,26 @@
             });
         }
         lucide.createIcons();
-    }
+    };
 
-    function closeDateDetails() {
-        document.getElementById('page-date-details').classList.remove('active');
-        document.getElementById('page-calendar').classList.add('active');
-        document.getElementById('bottom-nav-bar').style.display = 'flex';
-        document.querySelector('.fab-button').style.display = 'flex';
-    }
+    window.closeDateDetails = function() {
+        const pd = document.getElementById('page-date-details');
+        if(pd) pd.classList.remove('active');
+        const pc = document.getElementById('page-calendar');
+        if(pc) pc.classList.add('active');
+        
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'flex';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'flex';
+    };
 
 
     /* ==========================================
        [4] 통계 탭 전용 함수 (단일 차트 & 서브탭)
        ========================================== */
-    let statsYear = currentYear;
-    let statsMonth = currentMonth;
+    let statsYear = window.currentYear;
+    let statsMonth = window.currentMonth;
     let statsMode = 'month'; 
     let currentStatsChartType = 'expense'; 
     let chartMainInstance = null;
@@ -1478,7 +1540,7 @@
     window.setStatsChartType = function(type) {
         currentStatsChartType = type;
         renderStatsTab();
-    }
+    };
 
     const outLabelPlugin = {
         id: 'outLabels',
@@ -1616,19 +1678,21 @@
         }
     };
 
-    function setStatsMode(mode) {
+    window.setStatsMode = function(mode) {
         statsMode = mode;
+        const btnM = document.getElementById('btn-stats-month');
+        const btnY = document.getElementById('btn-stats-year');
         if(mode === 'month') {
-            document.getElementById('btn-stats-month').classList.add('active');
-            document.getElementById('btn-stats-year').classList.remove('active');
+            if(btnM) btnM.classList.add('active');
+            if(btnY) btnY.classList.remove('active');
         } else {
-            document.getElementById('btn-stats-month').classList.remove('active');
-            document.getElementById('btn-stats-year').classList.add('active');
+            if(btnM) btnM.classList.remove('active');
+            if(btnY) btnY.classList.add('active');
         }
         renderStatsTab();
-    }
+    };
 
-    function changeStatsPeriod(delta) {
+    window.changeStatsPeriod = function(delta) {
         if(statsMode === 'month') {
             statsMonth += delta;
             if (statsMonth > 12) { statsMonth = 1; statsYear++; } 
@@ -1637,10 +1701,11 @@
             statsYear += delta;
         }
         renderStatsTab();
-    }
+    };
 
     function renderStatsLegend(groupedObj, totalAmount, sign, colorClass) {
         const container = document.getElementById('stats-legend-container');
+        if(!container) return;
         container.innerHTML = '';
         
         let sortedArray = Object.keys(groupedObj).map(key => {
@@ -1691,20 +1756,29 @@
         let data = interleavedArray.map(item => item.amount);
         let total = data.reduce((a, b) => a + b, 0);
 
-        document.getElementById('stats-current-total').innerText = total > 0 ? `${sign}${formatNumber(total)}원` : '0원';
-        document.getElementById('stats-current-total').style.color = (sign === '+') ? 'var(--toss-blue)' : (currentStatsChartType === 'savings' ? 'var(--toss-purple)' : 'var(--toss-red)');
+        const currentTotalEl = document.getElementById('stats-current-total');
+        if(currentTotalEl) {
+            currentTotalEl.innerText = total > 0 ? `${sign}${formatNumber(total)}원` : '0원';
+            currentTotalEl.style.color = (sign === '+') ? 'var(--toss-blue)' : (currentStatsChartType === 'savings' ? 'var(--toss-purple)' : 'var(--toss-red)');
+        }
 
-        let ctx = document.getElementById('chart-stats-main').getContext('2d');
+        const canvasEl = document.getElementById('chart-stats-main');
+        if(!canvasEl) return;
+        
+        let ctx = canvasEl.getContext('2d');
         if (chartMainInstance) chartMainInstance.destroy();
 
         if (data.length === 0) {
-            document.getElementById('chart-stats-main').style.display = 'none';
-            document.getElementById('chart-stats-empty').style.display = 'block';
-            document.getElementById('stats-legend-container').innerHTML = '';
+            canvasEl.style.display = 'none';
+            const emptyEl = document.getElementById('chart-stats-empty');
+            if(emptyEl) emptyEl.style.display = 'block';
+            const legendEl = document.getElementById('stats-legend-container');
+            if(legendEl) legendEl.innerHTML = '';
             return;
         } else {
-            document.getElementById('chart-stats-main').style.display = 'block';
-            document.getElementById('chart-stats-empty').style.display = 'none';
+            canvasEl.style.display = 'block';
+            const emptyEl = document.getElementById('chart-stats-empty');
+            if(emptyEl) emptyEl.style.display = 'none';
         }
 
         let currentMainCat = currentStatsChartType === 'income' ? '수입' : (currentStatsChartType === 'savings' ? '저축' : '지출');
@@ -1756,10 +1830,12 @@
 
     function renderStatsTab() {
         const displayEl = document.getElementById('stats-period-display');
-        if(statsMode === 'month') {
-            displayEl.innerHTML = `${statsYear}년 ${statsMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
-        } else {
-            displayEl.innerHTML = `${statsYear}년 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+        if(displayEl) {
+            if(statsMode === 'month') {
+                displayEl.innerHTML = `${statsYear}년 ${statsMonth}월 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+            } else {
+                displayEl.innerHTML = `${statsYear}년 <i data-lucide="chevron-down" style="width: 18px; height: 18px; margin-left: 2px;"></i>`;
+            }
         }
 
         const filterFn = i => (statsMode === 'year') ? (i.year === statsYear) : (i.year === statsYear && i.month === statsMonth);
@@ -1773,18 +1849,27 @@
         let savAll = window.appData.filter(d => d.mainCategory === '저축' && filterFn(d));
         let sumSav = savAll.reduce((a, b) => a + b.amount, 0);
 
-        document.getElementById('stats-sum-income').innerText = `+${formatNumber(sumInc)}`;
-        document.getElementById('stats-sum-expense').innerText = `-${formatNumber(sumExp)}`;
-        document.getElementById('stats-sum-savings').innerText = `-${formatNumber(sumSav)}`;
+        const sumIncEl = document.getElementById('stats-sum-income');
+        if(sumIncEl) sumIncEl.innerText = `+${formatNumber(sumInc)}`;
+        const sumExpEl = document.getElementById('stats-sum-expense');
+        if(sumExpEl) sumExpEl.innerText = `-${formatNumber(sumExp)}`;
+        const sumSavEl = document.getElementById('stats-sum-savings');
+        if(sumSavEl) sumSavEl.innerText = `-${formatNumber(sumSav)}`;
 
         const total = sumInc - sumExp - sumSav;
         const totalEl = document.getElementById('stats-sum-total');
-        totalEl.innerText = `${total > 0 ? '+' : ''}${formatNumber(total)}`;
-        totalEl.style.color = total > 0 ? 'var(--toss-blue)' : (total < 0 ? 'var(--toss-red)' : 'var(--text-main)');
+        if(totalEl) {
+            totalEl.innerText = `${total > 0 ? '+' : ''}${formatNumber(total)}`;
+            totalEl.style.color = total > 0 ? 'var(--toss-blue)' : (total < 0 ? 'var(--toss-red)' : 'var(--text-main)');
+        }
 
-        document.getElementById('tab-stats-income').classList.toggle('active', currentStatsChartType === 'income');
-        document.getElementById('tab-stats-expense').classList.toggle('active', currentStatsChartType === 'expense');
-        document.getElementById('tab-stats-savings').classList.toggle('active', currentStatsChartType === 'savings');
+        const tabInc = document.getElementById('tab-stats-income');
+        const tabExp = document.getElementById('tab-stats-expense');
+        const tabSav = document.getElementById('tab-stats-savings');
+        
+        if(tabInc) tabInc.classList.toggle('active', currentStatsChartType === 'income');
+        if(tabExp) tabExp.classList.toggle('active', currentStatsChartType === 'expense');
+        if(tabSav) tabSav.classList.toggle('active', currentStatsChartType === 'savings');
 
         if (currentStatsChartType === 'expense') {
             drawStatsDonut(expenseAll, '-', 'color-red');
@@ -1797,15 +1882,22 @@
         lucide.createIcons();
     }
 
-    function openStatsDetails(typeKey, categoryName) {
+    window.openStatsDetails = function(typeKey, categoryName) {
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-        document.getElementById('bottom-nav-bar').style.display = 'none';
-        document.querySelector('.fab-button').style.display = 'none';
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'none';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'none';
         
-        document.getElementById('page-stats-details').classList.add('active');
-        document.getElementById('stats-detail-title').innerText = `${categoryName} 상세`;
+        const psd = document.getElementById('page-stats-details');
+        if(psd) psd.classList.add('active');
+        
+        const title = document.getElementById('stats-detail-title');
+        if(title) title.innerText = `${categoryName} 상세`;
 
         const container = document.getElementById('stats-detail-list');
+        if(!container) return;
+        
         let filteredItems = currentStatsData.filter(i => i.category === categoryName);
         
         let priceClass = (typeKey === 'income') ? 'price-plus' : 'price-minus';
@@ -1814,14 +1906,19 @@
         
         container.innerHTML = renderGroupedDetails(categoryName, filteredItems, priceClass, sign, colorClass, true);
         lucide.createIcons();
-    }
+    };
 
-    function closeStatsDetails() {
-        document.getElementById('page-stats-details').classList.remove('active');
-        document.getElementById('page-stats').classList.add('active');
-        document.getElementById('bottom-nav-bar').style.display = 'flex';
-        document.querySelector('.fab-button').style.display = 'flex';
-    }
+    window.closeStatsDetails = function() {
+        const psd = document.getElementById('page-stats-details');
+        if(psd) psd.classList.remove('active');
+        const ps = document.getElementById('page-stats');
+        if(ps) ps.classList.add('active');
+        
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'flex';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'flex';
+    };
 
     /* ==========================================
        연/월 선택 모달 전용 스크립트
@@ -1829,7 +1926,7 @@
     let pickerYear = detailYear;
     let currentPickerTarget = 'details';
 
-    function openMonthPicker(target) {
+    window.openMonthPicker = function(target) {
         currentPickerTarget = target;
         
         if(target === 'details') pickerYear = detailYear;
@@ -1837,27 +1934,33 @@
         else if(target === 'stats') pickerYear = statsYear;
         
         updatePickerUI();
-        document.getElementById('month-picker-modal').style.display = 'flex';
-    }
+        const modal = document.getElementById('month-picker-modal');
+        if(modal) modal.style.display = 'flex';
+    };
 
-    function closeMonthPicker() {
-        document.getElementById('month-picker-modal').style.display = 'none';
-    }
+    window.closeMonthPicker = function() {
+        const modal = document.getElementById('month-picker-modal');
+        if(modal) modal.style.display = 'none';
+    };
 
-    function changePickerYear(delta) {
+    window.changePickerYear = function(delta) {
         pickerYear += delta;
         updatePickerUI();
-    }
+    };
 
     function updatePickerUI() {
-        document.getElementById('picker-year-display').innerText = `${pickerYear}년`;
+        const py = document.getElementById('picker-year-display');
+        if(py) py.innerText = `${pickerYear}년`;
+        
+        const pmg = document.getElementById('picker-month-grid');
+        const pycb = document.getElementById('picker-year-confirm-btn');
         
         if (currentPickerTarget === 'stats' && statsMode === 'year') {
-            document.getElementById('picker-month-grid').style.display = 'none';
-            document.getElementById('picker-year-confirm-btn').style.display = 'block';
+            if(pmg) pmg.style.display = 'none';
+            if(pycb) pycb.style.display = 'block';
         } else {
-            document.getElementById('picker-month-grid').style.display = 'grid';
-            document.getElementById('picker-year-confirm-btn').style.display = 'none';
+            if(pmg) pmg.style.display = 'grid';
+            if(pycb) pycb.style.display = 'none';
             
             let targetYear = (currentPickerTarget === 'details') ? detailYear : (currentPickerTarget === 'calendar' ? calendarYear : statsYear);
             let targetMonth = (currentPickerTarget === 'details') ? detailMonth : (currentPickerTarget === 'calendar' ? calendarMonth : statsMonth);
@@ -1874,7 +1977,7 @@
         }
     }
 
-    function selectPickerMonth(m) {
+    window.selectPickerMonth = function(m) {
         if (currentPickerTarget === 'details') {
             detailYear = pickerYear; detailMonth = m; renderDetailsTab();
         } else if (currentPickerTarget === 'calendar') {
@@ -1883,27 +1986,28 @@
             statsYear = pickerYear; statsMonth = m; renderStatsTab();
         }
         closeMonthPicker();
-    }
+    };
 
-    function selectPickerYearOnly() {
+    window.selectPickerYearOnly = function() {
         if (currentPickerTarget === 'stats') {
             statsYear = pickerYear; renderStatsTab();
         }
         closeMonthPicker();
-    }
+    };
 
     // 하단 탭 전환 함수
-    function switchTab(tabId, btnElement) {
+    window.switchTab = function(tabId, btnElement) {
         ['page-calendar', 'page-details', 'page-main', 'page-stats', 'page-settings', 'page-date-details', 'page-home-details', 'page-stats-details'].forEach(id => {
             const page = document.getElementById(id);
             if(page) page.classList.remove('active');
         });
         
-        document.getElementById('page-' + tabId).classList.add('active');
+        const targetPage = document.getElementById('page-' + tabId);
+        if(targetPage) targetPage.classList.add('active');
 
         document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-        btnElement.classList.add('active');
-    }
+        if(btnElement) btnElement.classList.add('active');
+    };
 
     // --- 내역 수정 및 DB 저장 기능 ---
     let isEditMode = false;
@@ -1915,16 +2019,17 @@
         return { item: item, type: item.type === '수입' ? 'income' : (item.type === '저축' ? 'savings' : (item.mainCategory==='유동 지출'?'expenseFlow':'expenseFixed')) };
     }
 
-    function openInputPageWithDate(y, m, d) {
+    window.openInputPageWithDate = function(y, m, d) {
         openInputPage();
         const dateInput = document.getElementById('input-date');
+        if(!dateInput) return;
         const yy = y;
         const mm = String(m).padStart(2, '0');
         const dd = String(d).padStart(2, '0');
         dateInput.value = `${yy}-${mm}-${dd}`;
-    }
+    };
 
-    function openEditForm(id) {
+    window.openEditForm = function(id) {
         const data = findItemById(id);
         if(!data) return;
 
@@ -1938,24 +2043,39 @@
         record.type = item.type;
         record.mainCategory = item.mainCategory;
 
-        document.getElementById('modal-main-title').innerText = '내역 수정';
-        document.getElementById('submit-btn').innerText = '수정 완료';
-        document.getElementById('delete-btn').style.display = 'block';
+        const mmt = document.getElementById('modal-main-title');
+        if(mmt) mmt.innerText = '내역 수정';
+        const sb = document.getElementById('submit-btn');
+        if(sb) sb.innerText = '수정 완료';
+        const dbn = document.getElementById('delete-btn');
+        if(dbn) dbn.style.display = 'block';
         
-        document.getElementById('input-content').value = item.content;
-        document.getElementById('input-amount').value = formatNumber(item.amount);
+        const ic = document.getElementById('input-content');
+        if(ic) ic.value = item.content;
+        const ia = document.getElementById('input-amount');
+        if(ia) ia.value = formatNumber(item.amount);
         
         if(item.year && item.month && item.day) {
             const yy = item.year;
             const mm = String(item.month).padStart(2, '0');
             const dd = String(item.day).padStart(2, '0');
-            document.getElementById('input-date').value = `${yy}-${mm}-${dd}`;
+            const idt = document.getElementById('input-date');
+            if(idt) idt.value = `${yy}-${mm}-${dd}`;
         }
 
         document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('selected'));
-        if (record.type === '수입') document.querySelector('.btn-income').classList.add('selected');
-        else if (record.type === '지출') document.querySelector('.btn-expense').classList.add('selected');
-        else if (record.type === '저축') document.querySelector('.btn-savings').classList.add('selected');
+        if (record.type === '수입') {
+            const btn = document.querySelector('.btn-income');
+            if(btn) btn.classList.add('selected');
+        }
+        else if (record.type === '지출') {
+            const btn = document.querySelector('.btn-expense');
+            if(btn) btn.classList.add('selected');
+        }
+        else if (record.type === '저축') {
+            const btn = document.querySelector('.btn-savings');
+            if(btn) btn.classList.add('selected');
+        }
 
         document.querySelectorAll('.action-btn').forEach(btn => {
             if (btn.innerText.trim() === record.subCategory || btn.innerText.trim() === record.mainCategory) {
@@ -1964,7 +2084,8 @@
         });
 
         if (data.type === 'expenseFlow' || data.type === 'expenseFixed' || data.type === 'savings') {
-            document.getElementById('pay-method-group').classList.remove('hidden');
+            const pmg = document.getElementById('pay-method-group');
+            if(pmg) pmg.classList.remove('hidden');
             
             record.payMethod = item.payMethod || '신용카드';
             record.cardBank = item.cardBank || '';
@@ -1975,84 +2096,119 @@
             updateCardBankUI(record.cardBank);
             updatePaymentPlanUI(record.paymentPlan);
             
-            if (record.paymentPlan === '할부') {
-                document.getElementById('input-installment-months').value = record.installmentMonths;
-            } else {
-                document.getElementById('input-installment-months').value = '';
+            const iim = document.getElementById('input-installment-months');
+            if (iim) {
+                if (record.paymentPlan === '할부') {
+                    iim.value = record.installmentMonths;
+                } else {
+                    iim.value = '';
+                }
             }
         } else {
-            document.getElementById('pay-method-group').classList.add('hidden');
+            const pmg = document.getElementById('pay-method-group');
+            if(pmg) pmg.classList.add('hidden');
         }
 
         hideAllSteps();
         updateNav(3);
         
         const titleEl = document.getElementById('final-title');
-        if (record.type === '수입') {
-            titleEl.innerHTML = `<span class="color-blue">${item.category}</span>`;
-            document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-blue)';
-        } else if (record.type === '저축') {
-            titleEl.innerHTML = `<span style="color: var(--toss-purple);">${item.category}</span>`;
-            document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-purple)';
-        } else {
-            titleEl.innerHTML = `<span class="color-red">${item.category}</span>`;
-            document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-red)';
+        const sbtn = document.getElementById('submit-btn');
+        if(titleEl && sbtn) {
+            if (record.type === '수입') {
+                titleEl.innerHTML = `<span class="color-blue">${item.category}</span>`;
+                sbtn.style.backgroundColor = 'var(--toss-blue)';
+            } else if (record.type === '저축') {
+                titleEl.innerHTML = `<span style="color: var(--toss-purple);">${item.category}</span>`;
+                sbtn.style.backgroundColor = 'var(--toss-purple)';
+            } else {
+                titleEl.innerHTML = `<span class="color-red">${item.category}</span>`;
+                sbtn.style.backgroundColor = 'var(--toss-red)';
+            }
         }
 
-        document.getElementById('step-final').classList.remove('hidden');
-        document.getElementById('page-input').classList.add('active');
-        document.getElementById('bottom-nav-bar').style.display = 'none';
-        document.querySelector('.fab-button').style.display = 'none';
-    }
+        const sf = document.getElementById('step-final');
+        if(sf) sf.classList.remove('hidden');
+        const pi = document.getElementById('page-input');
+        if(pi) pi.classList.add('active');
+        
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'none';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'none';
+    };
 
-    function openInputPage() {
+    window.openInputPage = function() {
         isEditMode = false;
         editingItemId = null;
-        document.getElementById('modal-main-title').innerText = '내역 추가';
-        document.getElementById('submit-btn').innerText = '확인';
-        document.getElementById('delete-btn').style.display = 'none';
+        const mmt = document.getElementById('modal-main-title');
+        if(mmt) mmt.innerText = '내역 추가';
+        const sbtn = document.getElementById('submit-btn');
+        if(sbtn) sbtn.innerText = '확인';
+        const dbtn = document.getElementById('delete-btn');
+        if(dbtn) dbtn.style.display = 'none';
         
-        document.getElementById('page-input').classList.add('active');
-        document.getElementById('bottom-nav-bar').style.display = 'none';
-        document.querySelector('.fab-button').style.display = 'none';
+        const pi = document.getElementById('page-input');
+        if(pi) pi.classList.add('active');
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'none';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'none';
         resetInputForm(); 
-    }
+    };
 
-    function closeInputPage() {
-        document.getElementById('page-input').classList.remove('active');
-        document.getElementById('bottom-nav-bar').style.display = 'flex';
-        document.querySelector('.fab-button').style.display = 'flex';
-    }
+    window.closeInputPage = function() {
+        const pi = document.getElementById('page-input');
+        if(pi) pi.classList.remove('active');
+        const nav = document.getElementById('bottom-nav-bar');
+        if(nav) nav.style.display = 'flex';
+        const fab = document.querySelector('.fab-button');
+        if(fab) fab.style.display = 'flex';
+    };
 
     let record = { type: '', mainCategory: '', subCategory: '', content: '', amount: '', payMethod: '신용카드', cardBank: '', paymentPlan: '일시불', installmentMonths: '' };
 
     function resetInputForm() {
         hideAllSteps();
-        document.getElementById('step-type').classList.remove('hidden');
+        const st = document.getElementById('step-type');
+        if(st) st.classList.remove('hidden');
         updateNav(1);
         document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('selected'));
-        document.getElementById('input-content').value = '';
-        document.getElementById('input-amount').value = '';
-        document.getElementById('input-installment-months').value = '';
         
-        const yy = currentYear;
-        const mm = String(currentMonth).padStart(2, '0');
-        const dd = String(_today.getDate()).padStart(2, '0');
-        document.getElementById('input-date').value = `${yy}-${mm}-${dd}`;
+        const ic = document.getElementById('input-content');
+        if(ic) ic.value = '';
+        const ia = document.getElementById('input-amount');
+        if(ia) ia.value = '';
+        const iim = document.getElementById('input-installment-months');
+        if(iim) iim.value = '';
+        
+        const idate = document.getElementById('input-date');
+        if(idate) {
+            const yy = currentYear;
+            const mm = String(currentMonth).padStart(2, '0');
+            const dd = String(_today.getDate()).padStart(2, '0');
+            idate.value = `${yy}-${mm}-${dd}`;
+        }
     }
 
     function hideAllSteps() {
         const steps = ['step-type', 'step-cat-income', 'step-cat-expense-main', 'step-cat-expense-flow', 'step-cat-expense-fixed', 'step-cat-savings', 'step-final'];
-        steps.forEach(step => document.getElementById(step).classList.add('hidden'));
+        steps.forEach(step => {
+            const el = document.getElementById(step);
+            if(el) el.classList.add('hidden');
+        });
     }
 
     function updateNav(stepNum) {
-        document.getElementById('nav-type').classList.remove('active');
-        document.getElementById('nav-cat').classList.remove('active');
-        document.getElementById('nav-detail').classList.remove('active');
-        if(stepNum >= 1) document.getElementById('nav-type').classList.add('active');
-        if(stepNum >= 2) document.getElementById('nav-cat').classList.add('active');
-        if(stepNum >= 3) document.getElementById('nav-detail').classList.add('active');
+        const nt = document.getElementById('nav-type');
+        const nc = document.getElementById('nav-cat');
+        const nd = document.getElementById('nav-detail');
+        if(nt) nt.classList.remove('active');
+        if(nc) nc.classList.remove('active');
+        if(nd) nd.classList.remove('active');
+        if(stepNum >= 1 && nt) nt.classList.add('active');
+        if(stepNum >= 2 && nc) nc.classList.add('active');
+        if(stepNum >= 3 && nd) nd.classList.add('active');
     }
 
     window.selectType = function(type, btnElement) {
@@ -2060,53 +2216,76 @@
         if(type === '저축') record.mainCategory = '저축'; 
         
         document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('selected'));
-        btnElement.classList.add('selected');
+        if(btnElement) btnElement.classList.add('selected');
         
         setTimeout(() => {
             hideAllSteps(); updateNav(2);
-            if (type === '수입') document.getElementById('step-cat-income').classList.remove('hidden');
-            else if (type === '지출') document.getElementById('step-cat-expense-main').classList.remove('hidden');
-            else if (type === '저축') document.getElementById('step-cat-savings').classList.remove('hidden');
+            if (type === '수입') {
+                const el = document.getElementById('step-cat-income');
+                if(el) el.classList.remove('hidden');
+            }
+            else if (type === '지출') {
+                const el = document.getElementById('step-cat-expense-main');
+                if(el) el.classList.remove('hidden');
+            }
+            else if (type === '저축') {
+                const el = document.getElementById('step-cat-savings');
+                if(el) el.classList.remove('hidden');
+            }
         }, 150); 
     };
 
     window.showExpenseSub = function(mainCat) {
         record.mainCategory = mainCat;
         hideAllSteps();
-        if (mainCat === '유동 지출') document.getElementById('step-cat-expense-flow').classList.remove('hidden');
-        else if (mainCat === '고정 지출') document.getElementById('step-cat-expense-fixed').classList.remove('hidden');
+        if (mainCat === '유동 지출') {
+            const el = document.getElementById('step-cat-expense-flow');
+            if(el) el.classList.remove('hidden');
+        }
+        else if (mainCat === '고정 지출') {
+            const el = document.getElementById('step-cat-expense-fixed');
+            if(el) el.classList.remove('hidden');
+        }
     };
 
     window.selectCategory = function(subCat, btnElement) {
         record.subCategory = subCat;
         document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('selected'));
-        btnElement.classList.add('selected');
+        if(btnElement) btnElement.classList.add('selected');
 
         setTimeout(() => {
             hideAllSteps(); updateNav(3);
-            document.getElementById('step-final').classList.remove('hidden');
+            const sf = document.getElementById('step-final');
+            if(sf) sf.classList.remove('hidden');
             
             const titleEl = document.getElementById('final-title');
-            if (record.type === '수입') {
-                titleEl.innerHTML = `<span class="color-blue">${record.subCategory}</span>`;
-                document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-blue)';
-            } else if (record.type === '저축') {
-                titleEl.innerHTML = `<span style="color: var(--toss-purple);">${record.subCategory}</span>`;
-                document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-purple)';
-            } else {
-                titleEl.innerHTML = `<span class="color-red">${record.subCategory}</span>`;
-                document.getElementById('submit-btn').style.backgroundColor = 'var(--toss-red)';
+            const sbtn = document.getElementById('submit-btn');
+            
+            if(titleEl && sbtn) {
+                if (record.type === '수입') {
+                    titleEl.innerHTML = `<span class="color-blue">${record.subCategory}</span>`;
+                    sbtn.style.backgroundColor = 'var(--toss-blue)';
+                } else if (record.type === '저축') {
+                    titleEl.innerHTML = `<span style="color: var(--toss-purple);">${record.subCategory}</span>`;
+                    sbtn.style.backgroundColor = 'var(--toss-purple)';
+                } else {
+                    titleEl.innerHTML = `<span class="color-red">${record.subCategory}</span>`;
+                    sbtn.style.backgroundColor = 'var(--toss-red)';
+                }
             }
 
             if (record.type === '지출' || record.type === '저축') { 
-                document.getElementById('pay-method-group').classList.remove('hidden');
-                setPayMethod('신용카드'); 
+                const pmg = document.getElementById('pay-method-group');
+                if(pmg) pmg.classList.remove('hidden');
+                window.setPayMethod('신용카드'); 
             } else { 
-                document.getElementById('pay-method-group').classList.add('hidden'); 
+                const pmg = document.getElementById('pay-method-group');
+                if(pmg) pmg.classList.add('hidden');
                 record.payMethod = ''; 
             }
             
-            document.getElementById('input-amount').focus();
+            const ia = document.getElementById('input-amount');
+            if(ia) ia.focus();
         }, 150);
     };
 
@@ -2121,21 +2300,26 @@
     };
 
     function updatePayMethodUI(method) {
-        document.getElementById('pay-credit').classList.remove('active'); 
-        document.getElementById('pay-check').classList.remove('active'); 
-        document.getElementById('pay-cash').classList.remove('active');
+        const pc = document.getElementById('pay-credit');
+        const pch = document.getElementById('pay-check');
+        const pca = document.getElementById('pay-cash');
+        if(pc) pc.classList.remove('active'); 
+        if(pch) pch.classList.remove('active'); 
+        if(pca) pca.classList.remove('active');
         
-        document.getElementById('credit-options').classList.add('hidden');
-        document.getElementById('check-options').classList.add('hidden');
+        const co = document.getElementById('credit-options');
+        const cho = document.getElementById('check-options');
+        if(co) co.classList.add('hidden');
+        if(cho) cho.classList.add('hidden');
 
         if(method === '신용카드') {
-            document.getElementById('pay-credit').classList.add('active');
-            document.getElementById('credit-options').classList.remove('hidden');
+            if(pc) pc.classList.add('active');
+            if(co) co.classList.remove('hidden');
         } else if(method === '체크카드') {
-            document.getElementById('pay-check').classList.add('active');
-            document.getElementById('check-options').classList.remove('hidden');
+            if(pch) pch.classList.add('active');
+            if(cho) cho.classList.remove('hidden');
         } else if(method === '현금') {
-            document.getElementById('pay-cash').classList.add('active');
+            if(pca) pca.classList.add('active');
         }
     }
 
@@ -2159,16 +2343,21 @@
     };
 
     function updatePaymentPlanUI(plan) {
-        document.getElementById('plan-lump').classList.remove('active');
-        document.getElementById('plan-install').classList.remove('active');
+        const pl = document.getElementById('plan-lump');
+        const pinst = document.getElementById('plan-install');
+        if(pl) pl.classList.remove('active');
+        if(pinst) pinst.classList.remove('active');
         
+        const img = document.getElementById('installment-months-group');
+        const iim = document.getElementById('input-installment-months');
+
         if (plan === '일시불') {
-            document.getElementById('plan-lump').classList.add('active');
-            document.getElementById('installment-months-group').classList.add('hidden');
-            document.getElementById('input-installment-months').value = '';
+            if(pl) pl.classList.add('active');
+            if(img) img.classList.add('hidden');
+            if(iim) iim.value = '';
         } else {
-            document.getElementById('plan-install').classList.add('active');
-            document.getElementById('installment-months-group').remove('hidden');
+            if(pinst) pinst.classList.add('active');
+            if(img) img.classList.remove('hidden');
         }
     }
 
@@ -2179,29 +2368,48 @@
         
         if (target === 1) { 
             updateNav(1); 
-            document.getElementById('step-type').classList.remove('hidden'); 
+            const el = document.getElementById('step-type');
+            if(el) el.classList.remove('hidden'); 
         }
         else if (target === 'expense-main') {
             updateNav(2);
-            document.getElementById('step-cat-expense-main').classList.remove('hidden');
+            const el = document.getElementById('step-cat-expense-main');
+            if(el) el.classList.remove('hidden');
         }
         else if (target === 'category') {
             updateNav(2);
-            if (record.type === '수입') document.getElementById('step-cat-income').classList.remove('hidden');
-            else if (record.type === '지출') {
-                if(record.mainCategory === '유동 지출') document.getElementById('step-cat-expense-flow').classList.remove('hidden');
-                else if(record.mainCategory === '고정 지출') document.getElementById('step-cat-expense-fixed').classList.remove('hidden');
-                else document.getElementById('step-cat-expense-main').classList.remove('hidden');
+            if (record.type === '수입') {
+                const el = document.getElementById('step-cat-income');
+                if(el) el.classList.remove('hidden');
             }
-            else if (record.type === '저축') document.getElementById('step-cat-savings').classList.remove('hidden');
+            else if (record.type === '지출') {
+                if(record.mainCategory === '유동 지출') {
+                    const el = document.getElementById('step-cat-expense-flow');
+                    if(el) el.classList.remove('hidden');
+                }
+                else if(record.mainCategory === '고정 지출') {
+                    const el = document.getElementById('step-cat-expense-fixed');
+                    if(el) el.classList.remove('hidden');
+                }
+                else {
+                    const el = document.getElementById('step-cat-expense-main');
+                    if(el) el.classList.remove('hidden');
+                }
+            }
+            else if (record.type === '저축') {
+                const el = document.getElementById('step-cat-savings');
+                if(el) el.classList.remove('hidden');
+            }
             else {
                 updateNav(1);
-                document.getElementById('step-type').classList.remove('hidden');
+                const el = document.getElementById('step-type');
+                if(el) el.classList.remove('hidden');
             }
         }
         else if (target === 3) {
             updateNav(3);
-            document.getElementById('step-final').classList.remove('hidden');
+            const el = document.getElementById('step-final');
+            if(el) el.classList.remove('hidden');
         }
     };
 
@@ -2240,7 +2448,8 @@
             timestamp: Date.now()
         };
 
-        document.getElementById('loading-overlay').style.display = 'flex';
+        const lo = document.getElementById('loading-overlay');
+        if(lo) lo.style.display = 'flex';
 
         if (isEditMode) {
             await window.updateRecordToDB(editingItemId, newRecord);
@@ -2254,9 +2463,12 @@
     // ⭐️ 삭제 기능 ⭐️
     window.deleteData = async function() {
         if(confirm("정말로 이 내역을 삭제하시겠습니까?")) {
-            document.getElementById('loading-overlay').style.display = 'flex';
+            const lo = document.getElementById('loading-overlay');
+            if(lo) lo.style.display = 'flex';
+            
             await window.deleteRecordFromDB(editingItemId);
-            document.getElementById('loading-overlay').style.display = 'none';
+            
+            if(lo) lo.style.display = 'none';
             closeInputPage();
         }
     };
