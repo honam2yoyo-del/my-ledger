@@ -587,6 +587,13 @@
             </div>
             <div class="setting-item">
                 <div class="setting-info">
+                    <h3>저축 자동 등록</h3>
+                    <p>지난달 저축 내역을 매월 자동 기록합니다.</p>
+                </div>
+                <label class="switch"><input type="checkbox" id="setting-auto-savings" onchange="updateSettings()"><span class="slider"></span></label>
+            </div>
+            <div class="setting-item">
+                <div class="setting-info">
                     <h3>수입 자동 등록</h3>
                     <p>일정한 위탁 수입 등을 매월 자동 기록합니다.</p>
                 </div>
@@ -820,7 +827,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDocsFromServer, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBAGzTOYqnVFysfHvKKAw7KNX1QOnEXWmU",
@@ -900,13 +907,18 @@
                 if (docSnap.exists()) {
                     window.userSettings = docSnap.data();
                     const fixedSwitch = document.getElementById('setting-auto-fixed');
+                    const savingsSwitch = document.getElementById('setting-auto-savings');
                     const incomeSwitch = document.getElementById('setting-auto-income');
                     if (fixedSwitch) fixedSwitch.checked = window.userSettings.autoFixed !== false; 
+                    if (savingsSwitch) savingsSwitch.checked = window.userSettings.autoSavings !== false;
                     if (incomeSwitch) incomeSwitch.checked = window.userSettings.autoIncome === true; 
                 } else {
-                    window.userSettings = { autoFixed: true, autoIncome: false };
+                    window.userSettings = { autoFixed: true, autoSavings: true, autoIncome: false };
+                    document.getElementById('setting-auto-fixed').checked = true;
+                    document.getElementById('setting-auto-savings').checked = true;
                     setDoc(userDocRef, {
                         autoFixed: true,   
+                        autoSavings: true,
                         autoIncome: false, 
                         email: user.email || '',
                         name: user.displayName || '',
@@ -943,6 +955,64 @@
     let isRunningAutoRegister = false;
     let autoRegisterDoneThisSession = false; 
     window.hasFetchedData = false;
+
+    async function registerMonthlySavings(currentYM) {
+        if (window.userSettings.autoSavings === false || window.userSettings.lastSavingsAutoRun >= currentYM) return;
+
+        const userId = currentUser.uid;
+        const recordsRef = collection(db, 'artifacts', 'mymoneyapp-e6ef9', 'users', userId, 'records');
+        const userRef = doc(db, 'artifacts', 'mymoneyapp-e6ef9', 'users', userId);
+        // 캐시에 아직 없는 지난달 기록도 포함해 서버의 최신 내역으로 비교합니다.
+        const snapshot = await getDocsFromServer(recordsRef);
+        const records = snapshot.docs.map(recordDoc => ({ ...recordDoc.data(), id: recordDoc.id }));
+        const previousDate = new Date(currentYear, currentMonth - 2, 1);
+        const previousYear = previousDate.getFullYear();
+        const previousMonth = previousDate.getMonth() + 1;
+        const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+        const previousSavings = records.filter(item => item.mainCategory === '저축' && item.year === previousYear && item.month === previousMonth);
+        const remainingCurrent = records.filter(item => item.mainCategory === '저축' && item.year === currentYear && item.month === currentMonth);
+        const sameSavings = (left, right) => ['category', 'content', 'payMethod', 'cardBank']
+            .every(key => String(left[key] || '').trim() === String(right[key] || '').trim());
+
+        // 같은 항목이 여러 건이면 한 건씩 대응시키고, 이번 달에 바꾼 금액·날짜도 유지합니다.
+        const unmatched = previousSavings.filter(source => {
+            const index = remainingCurrent.findIndex(item => sameSavings(source, item)
+                && Number(source.amount) === Number(item.amount) && Math.min(source.day, lastDay) === item.day);
+            if (index < 0) return true;
+            remainingCurrent.splice(index, 1);
+            return false;
+        });
+        const copies = unmatched.filter(source => {
+            const index = remainingCurrent.findIndex(item => sameSavings(source, item));
+            if (index < 0) return true;
+            remainingCurrent.splice(index, 1);
+            return false;
+        }).map((source, index) => {
+            const data = { ...source };
+            delete data.id;
+            data.year = currentYear;
+            data.month = currentMonth;
+            data.day = Math.min(source.day, lastDay);
+            data.dateStr = `${currentMonth}. ${data.day}`;
+            data.timestamp = Date.now() + index;
+            data.isAutoRegistered = true;
+            data.autoSourceId = source.id;
+            data.autoSourceMonth = `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
+            return { ref: doc(recordsRef), data };
+        });
+
+        // 복사와 완료 월을 함께 저장해 여러 기기나 새로고침으로 중복되지 않게 합니다.
+        const completedMonth = await runTransaction(db, async transaction => {
+            const settingsSnapshot = await transaction.get(userRef);
+            const settings = settingsSnapshot.exists() ? settingsSnapshot.data() : {};
+            if (settings.autoSavings === false) return null;
+            if (settings.lastSavingsAutoRun >= currentYM) return settings.lastSavingsAutoRun;
+            copies.forEach(copy => transaction.set(copy.ref, copy.data));
+            transaction.set(userRef, { lastSavingsAutoRun: currentYM }, { merge: true });
+            return currentYM;
+        });
+        if (completedMonth && currentUser && currentUser.uid === userId) window.userSettings.lastSavingsAutoRun = completedMonth;
+    }
     
     window.checkAndRunAutoRegister = async function() {
         if(!currentUser || !window.userSettings) return;
@@ -954,13 +1024,22 @@
 
         const currentYM = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
         const APP_ID = 'mymoneyapp-e6ef9';
+
+        // 고정 지출 처리가 이미 끝난 달에도 저축은 별도로 한 번 등록합니다.
+        try {
+            await registerMonthlySavings(currentYM);
+        } catch (error) {
+            autoRegisterDoneThisSession = false;
+            console.error('저축 자동 등록 실패:', error);
+        }
         
         if(window.userSettings.lastAutoRun === currentYM) {
             isRunningAutoRegister = false;
             return;
         }
         
-        const alreadyAutoRegistered = window.appData.some(d => d.isAutoRegistered === true && d.year === currentYear && d.month === currentMonth);
+        const alreadyAutoRegistered = window.appData.some(d => d.isAutoRegistered === true && d.year === currentYear && d.month === currentMonth
+            && (d.mainCategory === '고정 지출' || d.mainCategory === '수입'));
         if (alreadyAutoRegistered) {
             try { await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid), { lastAutoRun: currentYM }); } catch(e) {}
             window.userSettings.lastAutoRun = currentYM;
@@ -1018,17 +1097,22 @@
     window.updateSettings = async function() {
         if(!currentUser || !window.userSettings) return;
         const autoFixed = document.getElementById('setting-auto-fixed').checked;
+        const autoSavings = document.getElementById('setting-auto-savings').checked;
         const autoIncome = document.getElementById('setting-auto-income').checked;
         const APP_ID = 'mymoneyapp-e6ef9';
         
         window.userSettings.autoFixed = autoFixed;
+        window.userSettings.autoSavings = autoSavings;
         window.userSettings.autoIncome = autoIncome;
 
         try {
             await updateDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid), {
                 autoFixed: autoFixed,
+                autoSavings: autoSavings,
                 autoIncome: autoIncome
             });
+            autoRegisterDoneThisSession = false;
+            await window.checkAndRunAutoRegister();
         } catch(e) {
             console.error("설정 저장 실패:", e);
         }
